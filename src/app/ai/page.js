@@ -361,42 +361,186 @@ export default function AIPage() {
 function renderMessage(text, darkMode) {
   if (!text) return "";
 
-  return text
-    .split("\n")
-    .map((line, i) => {
-      // Headings
-      if (line.startsWith("### ")) {
-        return (
-          <h3 key={i} style={darkMode ? styles.h3Dark : styles.h3Light}>
-            {line.replace("### ", "")}
-          </h3>
+  const lines = text.split("\n");
+  const elements = [];
+  let i = 0;
+  let inCodeBlock = false;
+  let codeContent = [];
+  let inTable = false;
+  let tableRows = [];
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Code block detection
+    if (line.trim().startsWith("```")) {
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeContent = [];
+        i++;
+        continue;
+      } else {
+        inCodeBlock = false;
+        elements.push(
+          <pre key={`code-${i}`} style={darkMode ? styles.codeBlockDark : styles.codeBlockLight}>
+            <code>{codeContent.join("\n")}</code>
+          </pre>
         );
+        i++;
+        continue;
       }
+    }
 
-      // Numbered list
-      const numbered = line.match(/^(\d+)\.\s(.*)/);
-      if (numbered) {
-        return (
-          <div key={i} style={darkMode ? styles.listItemDark : styles.listItemLight}>
-            <b>{numbered[1]}.</b> {numbered[2]}
-          </div>
-        );
+    if (inCodeBlock) {
+      codeContent.push(line);
+      i++;
+      continue;
+    }
+
+    // Table detection (lines with |)
+    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+      if (!inTable) {
+        inTable = true;
+        tableRows = [];
       }
+      tableRows.push(line);
+      i++;
+      if (i < lines.length && lines[i].trim().startsWith("|")) {
+        continue;
+      } else {
+        inTable = false;
+        const tableRowsToRender = tableRows.filter(row => {
+          const cells = row.split("|").filter(cell => cell.trim() !== "");
+          return !cells.every(cell => cell.trim().match(/^[-:]+$/));
+        });
+        if (tableRowsToRender.length > 0) {
+          elements.push(
+            <div key={`table-${i}`} style={darkMode ? styles.tableWrapperDark : styles.tableWrapperLight}>
+              <table style={darkMode ? styles.tableDark : styles.tableLight}>
+                <tbody>
+                  {tableRowsToRender.map((row, idx) => {
+                    const cells = row.split("|").filter(cell => cell.trim() !== "");
+                    const isHeader = idx === 0;
+                    return (
+                      <tr key={idx}>
+                        {cells.map((cell, cellIdx) => {
+                          const trimmed = cell.trim();
+                          return isHeader ? (
+                            <th key={cellIdx} style={darkMode ? styles.tableHeaderDark : styles.tableHeaderLight}>
+                              {trimmed}
+                            </th>
+                          ) : (
+                            <td key={cellIdx} style={darkMode ? styles.tableCellDark : styles.tableCellLight}>
+                              {trimmed}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        tableRows = [];
+        continue;
+      }
+    }
 
-      // Bold text
-      const boldLine = line.replace(
-        /\*\*(.*?)\*\*/g,
-        "<b>$1</b>"
+    // Headings
+    if (line.startsWith("### ")) {
+      elements.push(
+        <h3 key={i} style={darkMode ? styles.h3Dark : styles.h3Light}>
+          {line.replace("### ", "")}
+        </h3>
       );
+      i++;
+      continue;
+    }
 
-      return (
-        <p
-          key={i}
-          style={darkMode ? styles.paragraphDark : styles.paragraphLight}
-          dangerouslySetInnerHTML={{ __html: boldLine }}
-        />
+    if (line.startsWith("## ")) {
+      elements.push(
+        <h2 key={i} style={darkMode ? styles.h2Dark : styles.h2Light}>
+          {line.replace("## ", "")}
+        </h2>
       );
-    });
+      i++;
+      continue;
+    }
+
+    // Empty line
+    if (line.trim() === "") {
+      elements.push(<div key={i} style={{height: "4px"}}></div>);
+      i++;
+      continue;
+    }
+
+    // Numbered list
+    const numbered = line.match(/^(\d+)\.\s(.*)/);
+    if (numbered) {
+      elements.push(
+        <div key={i} style={darkMode ? styles.listItemDark : styles.listItemLight}>
+          <b>{numbered[1]}.</b> {renderInlineContent(numbered[2], darkMode)}
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Bullet list
+    const bullet = line.match(/^-\s(.*)/);
+    if (bullet) {
+      elements.push(
+        <div key={i} style={darkMode ? styles.listItemDark : styles.listItemLight}>
+          • {renderInlineContent(bullet[1], darkMode)}
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Regular paragraph
+    if (line.trim()) {
+      elements.push(
+        <p key={i} style={darkMode ? styles.paragraphDark : styles.paragraphLight}>
+          {renderInlineContent(line, darkMode)}
+        </p>
+      );
+    }
+    i++;
+  }
+
+  return elements;
+}
+
+function renderInlineContent(text, darkMode) {
+  if (!text) return "";
+
+  // Process bold text
+  const parts = [];
+  let remaining = text;
+  let boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  let lastIndex = 0;
+
+  while ((match = boldRegex.exec(remaining)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(remaining.substring(lastIndex, match.index));
+    }
+    parts.push(<strong key={`bold-${match.index}`}>{match[1]}</strong>);
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < remaining.length) {
+    parts.push(remaining.substring(lastIndex));
+  }
+
+  if (parts.length === 0) {
+    return text;
+  }
+
+  return parts;
 }
 
 /* ================= STYLES ================= */
@@ -825,7 +969,7 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
-  // Message Render Styles
+  // Message Render Styles - Enhanced
   paragraphDark: {
     margin: "4px 0",
     color: "#E8EDF5",
@@ -840,11 +984,27 @@ const styles = {
     margin: "8px 0",
     fontWeight: "700",
     color: "#E8EDF5",
+    fontSize: "18px",
   },
 
   h3Light: {
     margin: "8px 0",
     fontWeight: "700",
+    color: "#1A2332",
+    fontSize: "18px",
+  },
+
+  h2Dark: {
+    fontSize: "20px",
+    fontWeight: "700",
+    margin: "12px 0 8px",
+    color: "#E8EDF5",
+  },
+
+  h2Light: {
+    fontSize: "20px",
+    fontWeight: "700",
+    margin: "12px 0 8px",
     color: "#1A2332",
   },
 
@@ -856,6 +1016,82 @@ const styles = {
   listItemLight: {
     margin: "4px 0",
     color: "#1A2332",
+  },
+
+  // Code blocks
+  codeBlockDark: {
+    background: "rgba(255,255,255,0.05)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    overflow: "auto",
+    fontSize: "14px",
+    fontFamily: "'Courier New', monospace",
+    color: "#E8EDF5",
+    margin: "8px 0",
+  },
+
+  codeBlockLight: {
+    background: "rgba(0,0,0,0.05)",
+    border: "1px solid rgba(0,0,0,0.08)",
+    borderRadius: "8px",
+    padding: "12px 16px",
+    overflow: "auto",
+    fontSize: "14px",
+    fontFamily: "'Courier New', monospace",
+    color: "#1A2332",
+    margin: "8px 0",
+  },
+
+  // Tables
+  tableWrapperDark: {
+    overflowX: "auto",
+    margin: "8px 0",
+  },
+
+  tableWrapperLight: {
+    overflowX: "auto",
+    margin: "8px 0",
+  },
+
+  tableDark: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "14px",
+    color: "#E8EDF5",
+  },
+
+  tableLight: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: "14px",
+    color: "#1A2332",
+  },
+
+  tableHeaderDark: {
+    border: "1px solid rgba(255,255,255,0.1)",
+    padding: "8px 12px",
+    textAlign: "left",
+    background: "rgba(255,255,255,0.05)",
+    fontWeight: "600",
+  },
+
+  tableHeaderLight: {
+    border: "1px solid rgba(0,0,0,0.1)",
+    padding: "8px 12px",
+    textAlign: "left",
+    background: "rgba(0,0,0,0.03)",
+    fontWeight: "600",
+  },
+
+  tableCellDark: {
+    border: "1px solid rgba(255,255,255,0.08)",
+    padding: "6px 12px",
+  },
+
+  tableCellLight: {
+    border: "1px solid rgba(0,0,0,0.08)",
+    padding: "6px 12px",
   },
 };
 
