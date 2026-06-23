@@ -1,35 +1,116 @@
 "use client";
 
 import { useState } from "react";
+import ExcelJS from 'exceljs';
 
 export default function TemplatesPage() {
   const [darkMode, setDarkMode] = useState(true);
   const [downloadedTemplates, setDownloadedTemplates] = useState([]);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const handleDownload = (templateId, templateName, fileContent, fileName) => {
-    // Create a blob from the file content
-    const blob = new Blob([fileContent], { 
-      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-    });
-    
-    // Create download link
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    
-    // Track download
-    setDownloadedTemplates(prev => 
-      prev.includes(templateId) ? prev : [...prev, templateId]
-    );
+  const handleDownload = async (templateId, templateName, templateData) => {
+    try {
+      // Create a new workbook
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('Template');
+
+      // Define columns
+      worksheet.columns = templateData.columns;
+
+      // Add rows
+      templateData.rows.forEach(row => {
+        worksheet.addRow(row);
+      });
+
+      // --- Apply Styling ---
+
+      // 1. Style the header row (row 1)
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: templateData.headerColor || 'FF2E7D32' }
+      };
+      headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+      headerRow.height = 30;
+
+      // 2. Style data rows with borders
+      worksheet.eachRow((row, rowNumber) => {
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+            left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+            bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+            right: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+          };
+        });
+
+        // Highlight total row (last row)
+        if (rowNumber === worksheet.rowCount) {
+          row.font = { bold: true, color: { argb: 'FF1B5E20' } };
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE8F5E9' }
+          };
+          row.height = 25;
+        }
+      });
+
+      // 3. Format number columns
+      const headerRowData = templateData.rows[0] || [];
+      const columnTypes = templateData.columnTypes || [];
+      
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Skip header row
+        row.eachCell((cell, colNumber) => {
+          // Check if this column should be formatted as number
+          const colIndex = colNumber - 1;
+          if (columnTypes[colIndex] === 'number' && typeof cell.value === 'number') {
+            cell.numFmt = '#,##0.00';
+            cell.alignment = { horizontal: 'right' };
+          }
+        });
+      });
+
+      // 4. Auto-fit columns
+      worksheet.columns.forEach(column => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, (cell) => {
+          const columnLength = cell.value ? cell.value.toString().length : 0;
+          if (columnLength > maxLength) {
+            maxLength = columnLength;
+          }
+        });
+        column.width = Math.min(Math.max(maxLength + 5, 12), 30);
+      });
+
+      // Generate the Excel file
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      // Create download link
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = templateData.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      // Track download
+      setDownloadedTemplates(prev => 
+        prev.includes(templateId) ? prev : [...prev, templateId]
+      );
+    } catch (error) {
+      console.error('Error generating Excel file:', error);
+      alert('There was an error generating the Excel file. Please try again.');
+    }
   };
 
-  // Template data with actual Excel file content
+  // Template data with proper column definitions
   const templates = [
     {
       id: 1,
@@ -37,113 +118,28 @@ export default function TemplatesPage() {
       title: "Budget Planning Template",
       description: "Structure for annual and quarterly budgeting with built-in formulas for planning and tracking allocations. Includes revenue projections, expenditure planning, and variance analysis.",
       category: "Budgeting",
-      fileSize: "245 KB",
+      fileSize: "12 KB",
       fileType: ".xlsx",
       downloadCount: 342,
       fileName: "Budget_Planning_Template.xlsx",
-      fileContent: `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Heading">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#2E7D32" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-   <Borders>
-    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1"/>
-   </Borders>
-  </Style>
-  <Style ss:ID="SubHeading">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1"/>
-   <Interior ss:Color="#E8F5E9" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Currency">
-   <NumberFormat ss:Format="[$#,##0.00]"/>
-  </Style>
-  <Style ss:ID="Total">
-   <Font ss:Bold="1"/>
-   <Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Budget Template">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">LOCAL GOVERNMENT BUDGET PLANNING TEMPLATE</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">2026 FISCAL YEAR</Data></Cell>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Department</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Budget Category</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Planned Amount</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Actual Amount</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Variance</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Administration</Data></Cell>
-    <Cell><Data ss:Type="String">Personnel</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1500000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1450000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">50000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Administration</Data></Cell>
-    <Cell><Data ss:Type="String">Operations</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">850000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">820000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">30000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Health</Data></Cell>
-    <Cell><Data ss:Type="String">Primary Care</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2000000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1950000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">50000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Health</Data></Cell>
-    <Cell><Data ss:Type="String">Public Health</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1200000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1180000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">20000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Education</Data></Cell>
-    <Cell><Data ss:Type="String">Primary</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1800000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1750000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">50000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Infrastructure</Data></Cell>
-    <Cell><Data ss:Type="String">Roads</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">3000000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2900000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">100000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">TOTAL</Data></Cell>
-    <Cell/>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">10350000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">10050000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">300000</Data></Cell>
-   </Row>
-  </Table>
- </Worksheet>
-</Workbook>`
+      headerColor: "FF2E7D32",
+      columnTypes: ['string', 'string', 'number', 'number', 'number'],
+      columns: [
+        { header: 'Department', key: 'dept', width: 20 },
+        { header: 'Budget Category', key: 'category', width: 20 },
+        { header: 'Planned Amount', key: 'planned', width: 18 },
+        { header: 'Actual Amount', key: 'actual', width: 18 },
+        { header: 'Variance', key: 'variance', width: 16 }
+      ],
+      rows: [
+        ['Administration', 'Personnel', 1500000, 1450000, 50000],
+        ['Administration', 'Operations', 850000, 820000, 30000],
+        ['Health', 'Primary Care', 2000000, 1950000, 50000],
+        ['Health', 'Public Health', 1200000, 1180000, 20000],
+        ['Education', 'Primary', 1800000, 1750000, 50000],
+        ['Infrastructure', 'Roads', 3000000, 2900000, 100000],
+        ['TOTAL', '', 10350000, 10050000, 300000]
+      ]
     },
     {
       id: 2,
@@ -151,103 +147,27 @@ export default function TemplatesPage() {
       title: "Revenue Tracking Sheet",
       description: "Track internally generated revenue sources such as market fees, tenement rates, permits, and other income streams with automatic summaries and trend analysis.",
       category: "Revenue",
-      fileSize: "189 KB",
+      fileSize: "10 KB",
       fileType: ".xlsx",
       downloadCount: 287,
       fileName: "Revenue_Tracking_Sheet.xlsx",
-      fileContent: `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Heading">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#1976D2" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="SubHeading">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1"/>
-   <Interior ss:Color="#E3F2FD" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Currency">
-   <NumberFormat ss:Format="[$#,##0.00]"/>
-  </Style>
-  <Style ss:ID="Total">
-   <Font ss:Bold="1"/>
-   <Interior ss:Color="#BBDEFB" ss:Pattern="Solid"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Revenue Tracker">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">REVENUE TRACKING SHEET</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">Quarterly Revenue Collection</Data></Cell>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Revenue Source</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Q1</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Q2</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Q3</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Q4</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Market Fees</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">450000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">480000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">520000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">490000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Tenement Rates</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">320000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">340000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">360000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">350000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Permits</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">180000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">200000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">220000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">210000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Licenses</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">250000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">260000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">280000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">270000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Other Revenue</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">100000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">120000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">110000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">130000</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">TOTAL</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">1300000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">1400000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">1490000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">1450000</Data></Cell>
-   </Row>
-  </Table>
- </Worksheet>
-</Workbook>`
+      headerColor: "FF1976D2",
+      columnTypes: ['string', 'number', 'number', 'number', 'number'],
+      columns: [
+        { header: 'Revenue Source', key: 'source', width: 22 },
+        { header: 'Q1', key: 'q1', width: 14 },
+        { header: 'Q2', key: 'q2', width: 14 },
+        { header: 'Q3', key: 'q3', width: 14 },
+        { header: 'Q4', key: 'q4', width: 14 }
+      ],
+      rows: [
+        ['Market Fees', 450000, 480000, 520000, 490000],
+        ['Tenement Rates', 320000, 340000, 360000, 350000],
+        ['Permits', 180000, 200000, 220000, 210000],
+        ['Licenses', 250000, 260000, 280000, 270000],
+        ['Other Revenue', 100000, 120000, 110000, 130000],
+        ['TOTAL', 1300000, 1400000, 1490000, 1450000]
+      ]
     },
     {
       id: 3,
@@ -255,103 +175,27 @@ export default function TemplatesPage() {
       title: "Expenditure Tracker",
       description: "Monitor spending across departments, projects, and budget lines with automatic summaries, variance alerts, and department-by-department breakdowns.",
       category: "Expenditure",
-      fileSize: "312 KB",
+      fileSize: "10 KB",
       fileType: ".xlsx",
       downloadCount: 415,
       fileName: "Expenditure_Tracker.xlsx",
-      fileContent: `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Heading">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#D32F2F" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="SubHeading">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1"/>
-   <Interior ss:Color="#FFEBEE" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Currency">
-   <NumberFormat ss:Format="[$#,##0.00]"/>
-  </Style>
-  <Style ss:ID="Total">
-   <Font ss:Bold="1"/>
-   <Interior ss:Color="#FFCDD2" ss:Pattern="Solid"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Expenditure Tracker">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">EXPENDITURE TRACKER</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">Departmental Spending</Data></Cell>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Department</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Budget Allocation</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Spent to Date</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Remaining</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">% Spent</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Administration</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2350000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1980000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">370000</Data></Cell>
-    <Cell><Data ss:Type="Number">84.3</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Health</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">3200000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2760000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">440000</Data></Cell>
-    <Cell><Data ss:Type="Number">86.3</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Education</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1800000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1650000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">150000</Data></Cell>
-    <Cell><Data ss:Type="Number">91.7</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Infrastructure</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">3000000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2200000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">800000</Data></Cell>
-    <Cell><Data ss:Type="Number">73.3</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Social Welfare</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1500000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1420000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">80000</Data></Cell>
-    <Cell><Data ss:Type="Number">94.7</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">TOTAL</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">11850000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">10010000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">1840000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">84.5</Data></Cell>
-   </Row>
-  </Table>
- </Worksheet>
-</Workbook>`
+      headerColor: "FFD32F2F",
+      columnTypes: ['string', 'number', 'number', 'number', 'number'],
+      columns: [
+        { header: 'Department', key: 'dept', width: 20 },
+        { header: 'Budget Allocation', key: 'budget', width: 18 },
+        { header: 'Spent to Date', key: 'spent', width: 18 },
+        { header: 'Remaining', key: 'remaining', width: 16 },
+        { header: '% Spent', key: 'percent', width: 14 }
+      ],
+      rows: [
+        ['Administration', 2350000, 1980000, 370000, 84.3],
+        ['Health', 3200000, 2760000, 440000, 86.3],
+        ['Education', 1800000, 1650000, 150000, 91.7],
+        ['Infrastructure', 3000000, 2200000, 800000, 73.3],
+        ['Social Welfare', 1500000, 1420000, 80000, 94.7],
+        ['TOTAL', 11850000, 10010000, 1840000, 84.5]
+      ]
     },
     {
       id: 4,
@@ -359,125 +203,31 @@ export default function TemplatesPage() {
       title: "Monthly Financial Report",
       description: "Standard reporting format for monthly submissions and accountability tracking. Includes revenue, expenditure, and variance summary with visual charts.",
       category: "Reporting",
-      fileSize: "278 KB",
+      fileSize: "10 KB",
       fileType: ".xlsx",
       downloadCount: 198,
       fileName: "Monthly_Financial_Report.xlsx",
-      fileContent: `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Heading">
-   <Font ss:FontName="Calibri" ss:Size="16" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#1B5E20" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="SubHeading">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1"/>
-   <Interior ss:Color="#E8F5E9" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Currency">
-   <NumberFormat ss:Format="[$#,##0.00]"/>
-  </Style>
-  <Style ss:ID="Total">
-   <Font ss:Bold="1"/>
-   <Interior ss:Color="#C8E6C9" ss:Pattern="Solid"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Monthly Report">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">MONTHLY FINANCIAL REPORT</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">January 2026</Data></Cell>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Item</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Budgeted</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Actual</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Variance</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Status</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">REVENUE</Data></Cell>
-    <Cell/>
-    <Cell/>
-    <Cell/>
-    <Cell/>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Market Fees</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">150000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">142000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">-8000</Data></Cell>
-    <Cell><Data ss:Type="String">Under</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Tenement Rates</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">100000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">108000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">8000</Data></Cell>
-    <Cell><Data ss:Type="String">Over</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Permits</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">60000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">58000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">-2000</Data></Cell>
-    <Cell><Data ss:Type="String">Under</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">Total Revenue</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">310000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">308000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">-2000</Data></Cell>
-    <Cell/>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">EXPENDITURE</Data></Cell>
-    <Cell/>
-    <Cell/>
-    <Cell/>
-    <Cell/>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Personnel</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">400000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">395000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">5000</Data></Cell>
-    <Cell><Data ss:Type="String">Under</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Operations</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">250000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">265000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">-15000</Data></Cell>
-    <Cell><Data ss:Type="String">Over</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">Total Expenditure</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">650000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">660000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">-10000</Data></Cell>
-    <Cell/>
-   </Row>
-  </Table>
- </Worksheet>
-</Workbook>`
+      headerColor: "FF1B5E20",
+      columnTypes: ['string', 'number', 'number', 'number', 'string'],
+      columns: [
+        { header: 'Item', key: 'item', width: 22 },
+        { header: 'Budgeted', key: 'budgeted', width: 16 },
+        { header: 'Actual', key: 'actual', width: 16 },
+        { header: 'Variance', key: 'variance', width: 16 },
+        { header: 'Status', key: 'status', width: 14 }
+      ],
+      rows: [
+        ['REVENUE', '', '', '', ''],
+        ['Market Fees', 150000, 142000, -8000, 'Under'],
+        ['Tenement Rates', 100000, 108000, 8000, 'Over'],
+        ['Permits', 60000, 58000, -2000, 'Under'],
+        ['Total Revenue', 310000, 308000, -2000, ''],
+        ['', '', '', '', ''],
+        ['EXPENDITURE', '', '', '', ''],
+        ['Personnel', 400000, 395000, 5000, 'Under'],
+        ['Operations', 250000, 265000, -15000, 'Over'],
+        ['Total Expenditure', 650000, 660000, -10000, '']
+      ]
     },
     {
       id: 5,
@@ -485,102 +235,26 @@ export default function TemplatesPage() {
       title: "Variance Analysis Dashboard",
       description: "Comprehensive dashboard comparing budgeted vs actual figures with color-coded alerts for significant variances requiring management attention.",
       category: "Analysis",
-      fileSize: "423 KB",
+      fileSize: "10 KB",
       fileType: ".xlsx",
       downloadCount: 156,
       fileName: "Variance_Analysis_Dashboard.xlsx",
-      fileContent: `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Heading">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#6A1B9A" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="SubHeading">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1"/>
-   <Interior ss:Color="#F3E5F5" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Currency">
-   <NumberFormat ss:Format="[$#,##0.00]"/>
-  </Style>
-  <Style ss:ID="Total">
-   <Font ss:Bold="1"/>
-   <Interior ss:Color="#E1BEE7" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Positive">
-   <Font ss:Color="#2E7D32"/>
-  </Style>
-  <Style ss:ID="Negative">
-   <Font ss:Color="#C62828"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Variance Analysis">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">VARIANCE ANALYSIS DASHBOARD</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">Q1 2026</Data></Cell>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Department</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Budget</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Actual</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Variance</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">% Variance</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Administration</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">587500</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">560000</Data></Cell>
-    <Cell ss:StyleID="Currency" ss:StyleID="Positive"><Data ss:Type="Number">27500</Data></Cell>
-    <Cell><Data ss:Type="Number">4.7</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Health</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">800000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">820000</Data></Cell>
-    <Cell ss:StyleID="Currency" ss:StyleID="Negative"><Data ss:Type="Number">-20000</Data></Cell>
-    <Cell><Data ss:Type="Number">-2.5</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Education</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">450000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">465000</Data></Cell>
-    <Cell ss:StyleID="Currency" ss:StyleID="Negative"><Data ss:Type="Number">-15000</Data></Cell>
-    <Cell><Data ss:Type="Number">-3.3</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Infrastructure</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">750000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">720000</Data></Cell>
-    <Cell ss:StyleID="Currency" ss:StyleID="Positive"><Data ss:Type="Number">30000</Data></Cell>
-    <Cell><Data ss:Type="Number">4.0</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">TOTAL</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">2587500</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">2565000</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">22500</Data></Cell>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">0.9</Data></Cell>
-   </Row>
-  </Table>
- </Worksheet>
-</Workbook>`
+      headerColor: "FF6A1B9A",
+      columnTypes: ['string', 'number', 'number', 'number', 'number'],
+      columns: [
+        { header: 'Department', key: 'dept', width: 20 },
+        { header: 'Budget', key: 'budget', width: 16 },
+        { header: 'Actual', key: 'actual', width: 16 },
+        { header: 'Variance', key: 'variance', width: 16 },
+        { header: '% Variance', key: 'percent', width: 16 }
+      ],
+      rows: [
+        ['Administration', 587500, 560000, 27500, 4.7],
+        ['Health', 800000, 820000, -20000, -2.5],
+        ['Education', 450000, 465000, -15000, -3.3],
+        ['Infrastructure', 750000, 720000, 30000, 4.0],
+        ['TOTAL', 2587500, 2565000, 22500, 0.9]
+      ]
     },
     {
       id: 6,
@@ -588,103 +262,27 @@ export default function TemplatesPage() {
       title: "Procurement Plan Template",
       description: "Track procurement activities, contracts, and supplier information with automated reminders and progress tracking for each procurement phase.",
       category: "Procurement",
-      fileSize: "196 KB",
+      fileSize: "10 KB",
       fileType: ".xlsx",
       downloadCount: 234,
       fileName: "Procurement_Plan_Template.xlsx",
-      fileContent: `<?xml version="1.0" encoding="UTF-8"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
- xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Default" ss:Name="Normal">
-   <Alignment ss:Vertical="Bottom"/>
-   <Borders/>
-   <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-   <Interior/>
-   <NumberFormat/>
-   <Protection/>
-  </Style>
-  <Style ss:ID="Heading">
-   <Font ss:FontName="Calibri" ss:Size="14" ss:Bold="1" ss:Color="#FFFFFF"/>
-   <Interior ss:Color="#E65100" ss:Pattern="Solid"/>
-   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-  </Style>
-  <Style ss:ID="SubHeading">
-   <Font ss:FontName="Calibri" ss:Size="12" ss:Bold="1"/>
-   <Interior ss:Color="#FFF3E0" ss:Pattern="Solid"/>
-  </Style>
-  <Style ss:ID="Currency">
-   <NumberFormat ss:Format="[$#,##0.00]"/>
-  </Style>
-  <Style ss:ID="Total">
-   <Font ss:Bold="1"/>
-   <Interior ss:Color="#FFE0B2" ss:Pattern="Solid"/>
-  </Style>
- </Styles>
- <Worksheet ss:Name="Procurement Plan">
-  <Table>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">PROCUREMENT PLAN TEMPLATE</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Heading" ss:MergeAcross="4"><Data ss:Type="String">2026 Fiscal Year</Data></Cell>
-   </Row>
-   <Row/>
-   <Row>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Item</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Quantity</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Unit Cost</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Total Cost</Data></Cell>
-    <Cell ss:StyleID="SubHeading"><Data ss:Type="String">Status</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Office Furniture</Data></Cell>
-    <Cell><Data ss:Type="Number">50</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">45000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2250000</Data></Cell>
-    <Cell><Data ss:Type="String">In Progress</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">IT Equipment</Data></Cell>
-    <Cell><Data ss:Type="Number">30</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">85000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2550000</Data></Cell>
-    <Cell><Data ss:Type="String">Pending</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Stationery</Data></Cell>
-    <Cell><Data ss:Type="Number">200</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">5000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1000000</Data></Cell>
-    <Cell><Data ss:Type="String">Completed</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Vehicles</Data></Cell>
-    <Cell><Data ss:Type="Number">3</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">2500000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">7500000</Data></Cell>
-    <Cell><Data ss:Type="String">Planning</Data></Cell>
-   </Row>
-   <Row>
-    <Cell><Data ss:Type="String">Building Materials</Data></Cell>
-    <Cell><Data ss:Type="Number">100</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">15000</Data></Cell>
-    <Cell ss:StyleID="Currency"><Data ss:Type="Number">1500000</Data></Cell>
-    <Cell><Data ss:Type="String">In Progress</Data></Cell>
-   </Row>
-   <Row>
-    <Cell ss:StyleID="Total"><Data ss:Type="String">TOTAL</Data></Cell>
-    <Cell/>
-    <Cell/>
-    <Cell ss:StyleID="Total"><Data ss:Type="Number">14800000</Data></Cell>
-    <Cell/>
-   </Row>
-  </Table>
- </Worksheet>
-</Workbook>`
+      headerColor: "FFE65100",
+      columnTypes: ['string', 'number', 'number', 'number', 'string'],
+      columns: [
+        { header: 'Item', key: 'item', width: 22 },
+        { header: 'Quantity', key: 'qty', width: 14 },
+        { header: 'Unit Cost', key: 'unitCost', width: 16 },
+        { header: 'Total Cost', key: 'totalCost', width: 18 },
+        { header: 'Status', key: 'status', width: 16 }
+      ],
+      rows: [
+        ['Office Furniture', 50, 45000, 2250000, 'In Progress'],
+        ['IT Equipment', 30, 85000, 2550000, 'Pending'],
+        ['Stationery', 200, 5000, 1000000, 'Completed'],
+        ['Vehicles', 3, 2500000, 7500000, 'Planning'],
+        ['Building Materials', 100, 15000, 1500000, 'In Progress'],
+        ['TOTAL', '', '', 14800000, '']
+      ]
     }
   ];
 
@@ -918,8 +516,7 @@ export default function TemplatesPage() {
                   onClick={() => handleDownload(
                     template.id, 
                     template.title, 
-                    template.fileContent, 
-                    template.fileName
+                    template
                   )}
                   style={downloadedTemplates.includes(template.id) ? styles.downloadedButton : styles.downloadButton}
                   className="download-button"
