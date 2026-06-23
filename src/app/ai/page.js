@@ -409,6 +409,7 @@ function renderMessage(text, darkMode) {
         continue;
       } else {
         inTable = false;
+        // Filter out separator rows (rows with ---)
         const tableRowsToRender = tableRows.filter(row => {
           const cells = row.split("|").filter(cell => cell.trim() !== "");
           return !cells.every(cell => cell.trim().match(/^[-:]+$/));
@@ -421,19 +422,39 @@ function renderMessage(text, darkMode) {
                   {tableRowsToRender.map((row, idx) => {
                     const cells = row.split("|").filter(cell => cell.trim() !== "");
                     const isHeader = idx === 0;
+                    // Check if this is a total row (contains "Total" or "TOTAL")
+                    const isTotalRow = cells.some(cell => 
+                      cell.trim().toLowerCase().includes("total")
+                    );
                     return (
-                      <tr key={idx}>
+                      <tr key={idx} style={isTotalRow ? (darkMode ? styles.totalRowDark : styles.totalRowLight) : {}}>
                         {cells.map((cell, cellIdx) => {
-                          const trimmed = cell.trim();
-                          return isHeader ? (
-                            <th key={cellIdx} style={darkMode ? styles.tableHeaderDark : styles.tableHeaderLight}>
-                              {trimmed}
-                            </th>
-                          ) : (
-                            <td key={cellIdx} style={darkMode ? styles.tableCellDark : styles.tableCellLight}>
-                              {trimmed}
-                            </td>
-                          );
+                          // Clean up the cell content
+                          let trimmed = cell.trim();
+                          
+                          // Check if this is a numeric cell
+                          const isNumeric = !isNaN(parseFloat(trimmed.replace(/,/g, "").replace(/\*/g, ""))) && trimmed !== "";
+                          
+                          // Process inline formatting (bold, etc.) within the cell
+                          const renderedContent = renderInlineContent(trimmed, darkMode);
+                          
+                          if (isHeader && !isTotalRow) {
+                            return (
+                              <th key={cellIdx} style={darkMode ? styles.tableHeaderDark : styles.tableHeaderLight}>
+                                {renderedContent}
+                              </th>
+                            );
+                          } else {
+                            return (
+                              <td key={cellIdx} style={{
+                                ...(darkMode ? styles.tableCellDark : styles.tableCellLight),
+                                ...(isTotalRow ? (darkMode ? styles.totalCellDark : styles.totalCellLight) : {}),
+                                ...(isNumeric && !isTotalRow ? { fontWeight: "500" } : {})
+                              }}>
+                                {renderedContent}
+                              </td>
+                            );
+                          }
                         })}
                       </tr>
                     );
@@ -1092,6 +1113,30 @@ const styles = {
   tableCellLight: {
     border: "1px solid rgba(0,0,0,0.08)",
     padding: "6px 12px",
+  },
+
+  totalRowDark: {
+    background: "rgba(76, 175, 80, 0.08)",
+    fontWeight: "600",
+  },
+
+  totalRowLight: {
+    background: "rgba(76, 175, 80, 0.05)",
+    fontWeight: "600",
+  },
+
+  totalCellDark: {
+    border: "1px solid rgba(255,255,255,0.08)",
+    padding: "6px 12px",
+    fontWeight: "600",
+    color: "#4CAF50",
+  },
+
+  totalCellLight: {
+    border: "1px solid rgba(0,0,0,0.08)",
+    padding: "6px 12px",
+    fontWeight: "600",
+    color: "#2E7D32",
   },
 };
 
